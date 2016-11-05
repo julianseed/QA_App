@@ -15,6 +15,7 @@ import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
 import android.util.AndroidException;
 import android.util.Base64;
+import android.util.Log;
 import android.view.View;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -39,8 +40,10 @@ public class MainActivity extends AppCompatActivity {
 
     private DatabaseReference mDatabaseReference;
     private DatabaseReference mGenreRef;
+    private DatabaseReference mFavoriteRef;
     private ListView mListView;
     private ArrayList<Question> mQuestionArrayList;
+    private ArrayList<Favorite> mFavoriteArrayList;
     private QuestionListAdapter mAdapter;
 
     private ChildEventListener mEventListener = new ChildEventListener() {
@@ -62,7 +65,7 @@ public class MainActivity extends AppCompatActivity {
             }
 
             ArrayList<Answer> answerArrayList = new ArrayList<Answer>();
-            HashMap answerMap = (HashMap) map.get("answer");
+            HashMap answerMap = (HashMap) map.get("answers");
             if (answerMap != null) {
                 for (Object key : answerMap.keySet()) {
                     HashMap temp = (HashMap) answerMap.get((String) key);
@@ -75,7 +78,16 @@ public class MainActivity extends AppCompatActivity {
             }
 
             Question question =
-                    new Question(title, body, name, uid, dataSnapshot.getKey(), mGenre, bytes, answerArrayList);
+                    new Question(
+                            title,
+                            body,
+                            name,
+                            uid,
+                            dataSnapshot.getKey(),
+                            mGenre,
+                            bytes,
+                            answerArrayList
+                    );
             mQuestionArrayList.add(question);
             mAdapter.notifyDataSetChanged();
         }
@@ -89,7 +101,7 @@ public class MainActivity extends AppCompatActivity {
                 if (dataSnapshot.getKey().equals(question.getQuestionUid())) {
                     // このアプリで変更がある可能性があるのは回答（answer）のみ
                     question.getAnswers().clear();
-                    HashMap answerMap = (HashMap) map.get("answer");
+                    HashMap answerMap = (HashMap) map.get("answers");
                     if (answerMap != null) {
                         for (Object key : answerMap.keySet()) {
                             HashMap temp = (HashMap) answerMap.get((String) key);
@@ -109,6 +121,48 @@ public class MainActivity extends AppCompatActivity {
         @Override
         public void onChildRemoved(DataSnapshot dataSnapshot) {
 
+        }
+
+        @Override
+        public void onChildMoved(DataSnapshot dataSnapshot, String s) {
+
+        }
+
+        @Override
+        public void onCancelled(DatabaseError databaseError) {
+
+        }
+    };
+
+    private ChildEventListener mEventListenerFav = new ChildEventListener() {
+        @Override
+        public void onChildAdded(DataSnapshot dataSnapshot, String s) {
+            HashMap map = (HashMap) dataSnapshot.getValue();
+
+            String favKey = dataSnapshot.getKey();
+            String favoriteqid = (String) map.get("favoriteqid");
+            Favorite favorite = new Favorite(favKey, favoriteqid);
+
+            mFavoriteArrayList.add(favorite);
+        }
+
+        @Override
+        public void onChildChanged(DataSnapshot dataSnapshot, String s) {
+            // お気に入りは変更されないので何も処理はなし
+        }
+
+        @Override
+        public void onChildRemoved(DataSnapshot dataSnapshot) {
+            HashMap map = (HashMap) dataSnapshot.getValue();
+
+            String favoriteqid = (String) map.get("favoriteqid");
+
+            for (int i = 0; i < mFavoriteArrayList.size(); i++) {
+                if (mFavoriteArrayList.get(i).getmFavoriteQid().equals(favoriteqid)) {
+                    mFavoriteArrayList.remove(i);
+                    return;
+                }
+            }
         }
 
         @Override
@@ -157,7 +211,7 @@ public class MainActivity extends AppCompatActivity {
         });
 
         // ナビゲーションドロワーの設定
-        DrawerLayout drawer = (DrawerLayout) findViewById(R.id.drawer_layout);
+        final DrawerLayout drawer = (DrawerLayout) findViewById(R.id.drawer_layout);
         ActionBarDrawerToggle toggle =
                 new ActionBarDrawerToggle(this, drawer, mToolbar, R.string.app_name, R.string.app_name);
         drawer.addDrawerListener(toggle);
@@ -181,6 +235,11 @@ public class MainActivity extends AppCompatActivity {
                 } else if (id == R.id.nav_computer) {
                     mToolbar.setTitle("コンピューター");
                     mGenre = 4;
+                } else if (id == R.id.nav_favorite) {
+                    // お気に入り一覧画面へ遷移する
+                    Intent intent = new Intent(getApplicationContext(), FavQListActivity.class);
+                    intent.putExtra("favList", mFavoriteArrayList);
+                    startActivity(intent);
                 }
 
                 DrawerLayout drawer = (DrawerLayout) findViewById(R.id.drawer_layout);
@@ -202,6 +261,20 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
+        // ログインしているか判定して「お気に入り」の表示／非表示をコントロールする
+        Menu menu = (Menu) navigationView.getMenu();
+        MenuItem menu_fav = (MenuItem) menu.getItem(4);
+
+        // ログイン済みのユーザを収録する
+        FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
+
+        // ログインしている場合は、お気に入りメニューを表示する
+        if (user == null) {
+            menu_fav.setVisible(false);
+        } else {
+            menu_fav.setVisible(true);
+        }
+
         // Firebase
         mDatabaseReference = FirebaseDatabase.getInstance().getReference();
 
@@ -211,12 +284,36 @@ public class MainActivity extends AppCompatActivity {
         mQuestionArrayList = new ArrayList<Question>();
         mAdapter.notifyDataSetChanged();
 
+        // ログインしているユーザのFavoriteのリスナーを登録する
+        if (user != null) {
+            mFavoriteRef = mDatabaseReference.child(Const.FavoritePATH).child(user.getUid());
+            mFavoriteRef.addChildEventListener(mEventListenerFav);
+        }
+        // mFavoriteArrayListの初期化
+        mFavoriteArrayList = new ArrayList<Favorite>();
+
         mListView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
             @Override
             public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
                 // Questionのインスタンスを渡して質問詳細画面を起動する
                 Intent intent = new Intent(getApplicationContext(), QuestionDetailActivity.class);
                 intent.putExtra("question", mQuestionArrayList.get(position));
+                // お気に入りに登録されているかを送る
+                boolean bFavorite = false;
+                String favKey = "";
+                if (mFavoriteArrayList != null) {
+                    for (Favorite favorite : mFavoriteArrayList) {
+                        if (mQuestionArrayList.get(position)
+                                .getQuestionUid()
+                                .equals(favorite.getmFavoriteQid())) {
+                            bFavorite = true;
+                            favKey = favorite.getmFavKey();
+                            break;
+                        }
+                    }
+                }
+                intent.putExtra("favoriteflag", bFavorite);
+                intent.putExtra("favkey", favKey);
                 startActivity(intent);
             }
         });
@@ -244,5 +341,42 @@ public class MainActivity extends AppCompatActivity {
         }
 
         return super.onOptionsItemSelected(item);
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+
+        // この画面に戻ってきたら（主にログイン、ログアウトの状態が変わったら）ログイン状態に
+        // よるドロワーの状態変更とお気に入りデータのクリア等の処理を行う
+
+        // ログインしているか判定して「お気に入り」の表示／非表示をコントロールする
+        NavigationView navigationView = (NavigationView) findViewById(R.id.nav_view);
+        Menu menu = (Menu) navigationView.getMenu();
+        MenuItem menu_fav = (MenuItem) menu.getItem(4);
+
+        // ログイン済みのユーザを収録する
+        FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
+
+        // ログインしている場合は、お気に入りメニューを表示する
+        if (user == null) {
+            menu_fav.setVisible(false);
+
+            // お気に入りデータをクリア
+            if (mFavoriteRef != null) {
+                mFavoriteRef.removeEventListener(mEventListenerFav);
+            }
+            mFavoriteArrayList.clear();
+        } else {
+            menu_fav.setVisible(true);
+
+            // お気に入りデータをクリアして再取得
+            if (mFavoriteRef != null) {
+                mFavoriteRef.removeEventListener(mEventListenerFav);
+            }
+            mFavoriteArrayList.clear();
+            mFavoriteRef = mDatabaseReference.child(Const.FavoritePATH).child(user.getUid());
+            mFavoriteRef.addChildEventListener(mEventListenerFav);
+        }
     }
 }

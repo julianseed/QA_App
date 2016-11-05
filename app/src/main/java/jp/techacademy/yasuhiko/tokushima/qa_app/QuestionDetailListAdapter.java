@@ -61,6 +61,7 @@ public class QuestionDetailListAdapter extends BaseAdapter {
             if (convertView == null) {
                 convertView = mLayoutInflater.inflate(R.layout.list_question_detail, parent, false);
             }
+
             String body = mQuestion.getBody();
             String name = mQuestion.getName();
 
@@ -73,7 +74,8 @@ public class QuestionDetailListAdapter extends BaseAdapter {
             byte[] bytes = mQuestion.getImageBytes();
             if (bytes.length != 0) {
                 Bitmap image =
-                        BitmapFactory.decodeByteArray(bytes, 0, bytes.length).copy(Bitmap.Config.ARGB_8888, true);
+                        BitmapFactory.decodeByteArray(bytes, 0, bytes.length)
+                                .copy(Bitmap.Config.ARGB_8888, true);
                 ImageView imageView = (ImageView) convertView.findViewById(R.id.imageView);
                 imageView.setImageBitmap(image);
             }

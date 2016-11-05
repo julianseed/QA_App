@@ -13,14 +13,14 @@ import android.widget.TextView;
 import java.util.ArrayList;
 
 /**
- * Created by tokushima on 2016/10/30.
+ * Created by tokushima on 2016/11/05.
  */
 
-public class QuestionListAdapter extends BaseAdapter {
+public class FavQuestionListAdapter extends BaseAdapter {
     private LayoutInflater mLayoutInflater = null;
     private ArrayList<Question> mQuestionArrayList;
 
-    public QuestionListAdapter(Context context) {
+    public FavQuestionListAdapter(Context context) {
         mLayoutInflater = (LayoutInflater) context.getSystemService(Context.LAYOUT_INFLATER_SERVICE);
     }
 
@@ -67,7 +67,7 @@ public class QuestionListAdapter extends BaseAdapter {
         return convertView;
     }
 
-    public void setmQuestionArrayList(ArrayList<Question> questionArrayList) {
+    public void setmFavQuestionArrayList(ArrayList<Question> questionArrayList) {
         mQuestionArrayList = questionArrayList;
     }
 }
